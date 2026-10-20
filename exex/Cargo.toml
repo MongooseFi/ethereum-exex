@@ -2,7 +2,7 @@
 name = "mongoosefi-reth"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.95"
+rust-version = "1.96"
 license = "MIT OR Apache-2.0"
 description = "reth 2.4.1 with the MongooseFi thin ExEx; same CLI, datadir and build features as stock reth"
 

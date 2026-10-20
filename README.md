@@ -19,7 +19,7 @@ the original Services commit and hashes of every migrated Rust source file.
 
 ## Build
 
-Use the Rust toolchain in `rust-toolchain.toml`. On Ubuntu, install `build-essential`,
+Use Rust 1.96.0 as pinned in `rust-toolchain.toml`; the locked build metadata dependencies require Rust 1.96. On Ubuntu, install `build-essential`,
 `pkg-config`, `libssl-dev`, `clang`, `libclang-dev`, `cmake` and `libgmp-dev`.
 
 ```sh
@@ -52,8 +52,8 @@ Services has its own CI and does not compile the Reth node.
 Push a semantic version tag beginning with `v` to release, for example:
 
 ```sh
-git tag -a v0.1.0 -m "release: v0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.1 -m "release: v0.1.1"
+git push origin v0.1.1
 ```
 
 The release has three ordered stages:
