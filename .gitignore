@@ -1,0 +1,14 @@
+/target/
+**/target/
+/build/
+*.log
+*.sock
+.env*
+__pycache__/
+*.py[cod]
+.DS_Store
+/secrets/
+/private/
+*.pem
+*.key
+/dist/

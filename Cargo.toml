@@ -1,0 +1,5 @@
+# Ethereum execution node and the independently consumable ExEx protocol crate.
+[workspace]
+members = ["exex", "crates/exex_stream"]
+default-members = ["exex"]
+resolver = "2"

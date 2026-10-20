@@ -1,0 +1,70 @@
+name: build Linux binaries
+on:
+  workflow_call:
+permissions:
+  contents: read
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_BUILD_JOBS: "3"
+  CARGO_PROFILE_RELEASE_DEBUG: "0"
+  CARGO_PROFILE_RELEASE_STRIP: symbols
+  RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
+jobs:
+  binary:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            machine: x86_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            machine: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Prepare native build environment
+        env:
+          EXPECTED_MACHINE: ${{ matrix.machine }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "$EXPECTED_MACHINE"
+          # Reclaim optional SDKs on this disposable GitHub-hosted runner.
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev clang libclang-dev lld cmake libgmp-dev
+          rustup show
+          df -h .
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: node-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', '.github/workflows/build-binaries.yml') }}-${{ hashFiles('exex/**', 'crates/**') }}
+          restore-keys: |
+            node-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', '.github/workflows/build-binaries.yml') }}-
+      - name: Build once and record artifact identity
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          cargo build --locked --release -p mongoosefi-reth
+          mkdir -p dist
+          binary="mongoosefi-reth-linux-$ARCH"
+          install -m 755 target/release/mongoosefi-reth "dist/$binary"
+          "dist/$binary" --version > "dist/$binary.version.txt"
+          ldd "dist/$binary" | tee "dist/$binary.ldd.txt"
+          ! grep -q 'not found' "dist/$binary.ldd.txt"
+          git rev-parse HEAD > "dist/$binary.commit.txt"
+          (cd dist && sha256sum "$binary" > "$binary.sha256")
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: binary-linux-${{ matrix.arch }}
+          path: dist/
+          retention-days: 14
+          if-no-files-found: error

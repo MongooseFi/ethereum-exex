@@ -1,0 +1,5 @@
+*
+!Dockerfile
+!dist/
+!dist/mongoosefi-reth-linux-amd64
+!dist/mongoosefi-reth-linux-arm64

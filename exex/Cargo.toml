@@ -1,0 +1,35 @@
+[package]
+name = "mongoosefi-reth"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+description = "reth 2.4.1 with the MongooseFi thin ExEx; same CLI, datadir and build features as stock reth"
+
+# Pinned to the exact reth the Z790 node runs (8eb21017); bump with the node.
+# `reth` is stock reth's own binary crate with its default features except
+# `jit`, which needs LLVM 22 at build time: build with `--features jit` when
+# the running node's `reth --version` lists it.
+[dependencies]
+reth = { git = "https://github.com/paradigmxyz/reth", rev = "8eb210175687c9f0c889a3b6795c16781d830e3a", default-features = false, features = ["jemalloc", "otlp", "otlp-logs", "js-tracer", "keccak-cache-global", "asm-keccak", "gmp", "min-trace-logs"] }
+reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "8eb210175687c9f0c889a3b6795c16781d830e3a", features = ["portable"] }
+reth-cli-util = { git = "https://github.com/paradigmxyz/reth", rev = "8eb210175687c9f0c889a3b6795c16781d830e3a" }
+reth-ethereum-cli = { git = "https://github.com/paradigmxyz/reth", rev = "8eb210175687c9f0c889a3b6795c16781d830e3a" }
+reth-node-ethereum = { git = "https://github.com/paradigmxyz/reth", rev = "8eb210175687c9f0c889a3b6795c16781d830e3a" }
+reth-ethereum = { git = "https://github.com/paradigmxyz/reth", rev = "8eb210175687c9f0c889a3b6795c16781d830e3a", features = ["full"] }
+exex-stream = { path = "../crates/exex_stream" }
+alloy-primitives = "1.6"
+# Same major as reth 2.4.1; the lockfile resolves reth's exact versions.
+alloy-consensus = "2"
+alloy-eips = "2"
+clap = { version = "4", features = ["derive"] }
+eyre = "0.6"
+futures = "0.3"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+
+[features]
+# The stock binary's features its `main` checks; `jit` is opt-in (see above).
+default = ["jemalloc"]
+jemalloc = ["reth/jemalloc"]
+jit = ["reth/jit", "reth-node-ethereum/jit"]

@@ -1,0 +1,133 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    uses: ./.github/workflows/build-binaries.yml
+  image:
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: binary-linux-${{ matrix.arch }}
+          path: dist/
+      - name: Verify binary from build job
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum -c "mongoosefi-reth-linux-$ARCH.sha256")
+          test "$(cat "dist/mongoosefi-reth-linux-$ARCH.commit.txt")" = "$(git rev-parse HEAD)"
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Package the existing binary
+        env:
+          ARCH: ${{ matrix.arch }}
+          IMAGE: ghcr.io/mongoosefi/ethereum-exex
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]
+          # Dockerfile has no Rust toolchain and cannot rebuild the binary.
+          docker buildx build --platform "linux/$ARCH" --load \
+            --build-arg "VERSION=$VERSION" --build-arg "REVISION=$GITHUB_SHA" \
+            --tag "$IMAGE:build-$GITHUB_RUN_ID-$ARCH" .
+          docker run --rm --network none "$IMAGE:build-$GITHUB_RUN_ID-$ARCH" --version
+          container=$(docker create "$IMAGE:build-$GITHUB_RUN_ID-$ARCH")
+          docker cp "$container:/usr/local/bin/mongoosefi-reth" /tmp/image-binary
+          docker rm "$container"
+          cmp /tmp/image-binary "dist/mongoosefi-reth-linux-$ARCH"
+          # Only verified images are published. The final manifest uses these digests.
+          docker push "$IMAGE:build-$GITHUB_RUN_ID-$ARCH"
+          digest=$(docker image inspect "$IMAGE:build-$GITHUB_RUN_ID-$ARCH" --format '{{index .RepoDigests 0}}')
+          [[ "$digest" =~ @sha256:[a-f0-9]{64}$ ]]
+          mkdir -p digests
+          printf '%s\n' "$digest" > "digests/$ARCH.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: image-digest-${{ matrix.arch }}
+          path: digests/
+          retention-days: 14
+          if-no-files-found: error
+  publish:
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: binary-linux-*
+          path: dist/
+          merge-multiple: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: image-digest-*
+          path: digests/
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish manifest and binary release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ghcr.io/mongoosefi/ethereum-exex
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum -c mongoosefi-reth-linux-amd64.sha256 && sha256sum -c mongoosefi-reth-linux-arm64.sha256)
+          for arch in amd64 arm64; do
+            test "$(cat "dist/mongoosefi-reth-linux-$arch.commit.txt")" = "$(git rev-parse HEAD)"
+          done
+          docker buildx imagetools create --tag "$IMAGE:$VERSION" "$(cat digests/amd64.txt)" "$(cat digests/arm64.txt)"
+          docker buildx imagetools inspect "$IMAGE:$VERSION" --raw > dist/image-manifest.json
+          python3 - <<'PYTHON'
+          import json
+          m = json.load(open('dist/image-manifest.json'))
+          assert {(p['platform']['os'], p['platform']['architecture']) for p in m['manifests']} == {('linux', 'amd64'), ('linux', 'arm64')}
+          PYTHON
+          cat dist/mongoosefi-reth-linux-{amd64,arm64}.sha256 > dist/SHA256SUMS
+          cat > dist/release-notes.md <<EOF
+          Linux amd64 and arm64 binaries built from commit \`$GITHUB_SHA\`.
+
+          Multi-platform image: \`$IMAGE:$VERSION\`
+
+          Both images contain the exact corresponding release binary, verified by SHA-256 and byte comparison.
+          Default features include jemalloc; JIT is not enabled. No node deployment is performed.
+          EOF
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$VERSION" --verify-tag --title "$VERSION" \
+            --notes-file dist/release-notes.md "${prerelease[@]}" \
+            dist/mongoosefi-reth-linux-amd64 dist/mongoosefi-reth-linux-arm64 \
+            dist/SHA256SUMS dist/image-manifest.json

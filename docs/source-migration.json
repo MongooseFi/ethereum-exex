@@ -1,0 +1,15 @@
+{
+  "source_repository": "https://github.com/MongooseFi/services",
+  "source_commit": "13c9df3ee6c9e04e466143c05eb63c4d3cebde79",
+  "source_files_sha256": {
+    "node/exex/src/convert.rs": "02887b5742396dfdda01a934160a0cc487a4c39618f3f44935ea1a17eeb2f4db",
+    "node/exex/src/main.rs": "e265dfbe72a85c6b835b7502acfb51c101bd8f51d4c7a38625a93fe8f4f5e531",
+    "crates/exex_stream/src/client.rs": "2a4a050559f646bb4b404ae4a431c3caa89b1d88dc543951e417a0cf91845d7d",
+    "crates/exex_stream/src/lib.rs": "36751b5f2bd63e499d8651b135888515cff695ed8fb0a2d7556a5254c5de8ab8",
+    "crates/exex_stream/src/server.rs": "538ada7e928cb19eb46ff466603a52f3c58086a8f6641ec6f930ba2eac1fc55b",
+    "crates/exex_stream/src/wire.rs": "b8cc59b2fb10cb241d534a094723f66e849e8316c015925ab71aa404e178d4d0",
+    "crates/exex_stream/examples/tail.rs": "7e7992e7870014241dcd9f651ee51a3764c99e57655db1e1e77936ad58c43719"
+  },
+  "wire_version": 4,
+  "runtime_changes": false
+}
